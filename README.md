@@ -46,9 +46,22 @@ The game is designed around very short sessions: each level should be readable i
 - `v0.4` skins, coins, and daily challenge prototype;
 - `v1.0` App Store / Google Play release candidate.
 
+## Live Prototype
+
+Open [`prototype/index.html`](prototype/index.html) in a browser to try the first route-drawing prototype.
+
+What exists now:
+
+- draw a route with the mouse / finger;
+- courier follows the route after release;
+- pickup and delivery points;
+- moving traffic obstacles;
+- win / fail states;
+- timer and distance feedback.
+
 ## Status
 
-Planning / prototype stage.
+Playable browser prototype. Unity mobile implementation is the next step.
 
 ## Product Notes
 

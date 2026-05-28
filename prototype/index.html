@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>One Line Courier Prototype</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #101820;
+      color: #f7fafc;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .shell { width: min(920px, 100vw); padding: 16px; }
+    .top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    h1 { margin: 0; font-size: 22px; }
+    .hud { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+    .pill {
+      padding: 6px 10px;
+      border: 1px solid #334155;
+      border-radius: 999px;
+      background: #17212b;
+      font-size: 13px;
+    }
+    canvas {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      display: block;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      background: #17212b;
+      touch-action: none;
+    }
+    .help {
+      margin-top: 10px;
+      color: #cbd5e1;
+      font-size: 14px;
+    }
+    button {
+      color: #0f172a;
+      background: #8be9a6;
+      border: 0;
+      border-radius: 999px;
+      padding: 7px 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <div class="top">
+      <h1>One Line Courier</h1>
+      <div class="hud">
+        <span class="pill" id="status">Draw a route</span>
+        <span class="pill" id="timer">Time 20.0</span>
+        <span class="pill" id="distance">Distance 0</span>
+        <button id="reset">Reset</button>
+      </div>
+    </div>
+    <canvas id="game" width="960" height="540" aria-label="One Line Courier prototype"></canvas>
+    <p class="help">Draw from the courier to the pickup, then to the delivery. Release to start. Avoid moving traffic.</p>
+  </main>
+  <script>
+    const canvas = document.querySelector("#game");
+    const ctx = canvas.getContext("2d");
+    const statusEl = document.querySelector("#status");
+    const timerEl = document.querySelector("#timer");
+    const distanceEl = document.querySelector("#distance");
+    const resetBtn = document.querySelector("#reset");
+
+    const start = { x: 90, y: 440 };
+    const pickup = { x: 350, y: 170, r: 20, done: false };
+    const delivery = { x: 800, y: 380, r: 24, done: false };
+    const courier = { x: start.x, y: start.y, r: 10, speed: 170, target: 0 };
+    const traffic = [
+      { x: 160, y: 270, vx: 90, min: 140, max: 820, r: 15 },
+      { x: 760, y: 175, vx: -120, min: 130, max: 830, r: 15 },
+      { x: 510, y: 400, vx: 75, min: 260, max: 860, r: 15 }
+    ];
+    let route = [];
+    let drawing = false;
+    let running = false;
+    let finished = false;
+    let failed = false;
+    let timeLeft = 20;
+    let lastTime = performance.now();
+
+    function reset() {
+      route = [];
+      drawing = false;
+      running = false;
+      finished = false;
+      failed = false;
+      pickup.done = false;
+      delivery.done = false;
+      courier.x = start.x;
+      courier.y = start.y;
+      courier.target = 0;
+      timeLeft = 20;
+      statusEl.textContent = "Draw a route";
+    }
+
+    function pointerPosition(event) {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: (event.clientX - rect.left) * canvas.width / rect.width,
+        y: (event.clientY - rect.top) * canvas.height / rect.height
+      };
+    }
+
+    canvas.addEventListener("pointerdown", (event) => {
+      if (running) return;
+      reset();
+      drawing = true;
+      route = [start, pointerPosition(event)];
+    });
+
+    canvas.addEventListener("pointermove", (event) => {
+      if (!drawing) return;
+      const p = pointerPosition(event);
+      const prev = route[route.length - 1];
+      if (Math.hypot(p.x - prev.x, p.y - prev.y) > 8) route.push(p);
+    });
+
+    canvas.addEventListener("pointerup", () => {
+      if (!drawing || route.length < 4) return;
+      drawing = false;
+      running = true;
+      statusEl.textContent = "Courier running";
+    });
+
+    resetBtn.addEventListener("click", reset);
+
+    function update(dt) {
+      for (const car of traffic) {
+        car.x += car.vx * dt;
+        if (car.x < car.min || car.x > car.max) car.vx *= -1;
+      }
+
+      if (!running || finished || failed) return;
+      timeLeft -= dt;
+      if (timeLeft <= 0) {
+        failed = true;
+        statusEl.textContent = "Too late";
+        return;
+      }
+
+      const target = route[courier.target];
+      if (!target) {
+        failed = true;
+        statusEl.textContent = "Route missed delivery";
+        return;
+      }
+      const dx = target.x - courier.x;
+      const dy = target.y - courier.y;
+      const d = Math.hypot(dx, dy);
+      const step = courier.speed * dt;
+      if (d <= step) {
+        courier.x = target.x;
+        courier.y = target.y;
+        courier.target += 1;
+      } else {
+        courier.x += dx / d * step;
+        courier.y += dy / d * step;
+      }
+
+      if (!pickup.done && Math.hypot(courier.x - pickup.x, courier.y - pickup.y) < pickup.r + courier.r) {
+        pickup.done = true;
+        statusEl.textContent = "Package picked up";
+      }
+      if (pickup.done && Math.hypot(courier.x - delivery.x, courier.y - delivery.y) < delivery.r + courier.r) {
+        delivery.done = true;
+        finished = true;
+        statusEl.textContent = "Delivered";
+      }
+      for (const car of traffic) {
+        if (Math.hypot(courier.x - car.x, courier.y - car.y) < courier.r + car.r) {
+          failed = true;
+          statusEl.textContent = "Traffic collision";
+        }
+      }
+    }
+
+    function routeDistance() {
+      let total = 0;
+      for (let i = 1; i < route.length; i++) {
+        total += Math.hypot(route[i].x - route[i - 1].x, route[i].y - route[i - 1].y);
+      }
+      return Math.round(total);
+    }
+
+    function drawCity() {
+      ctx.fillStyle = "#17212b";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = "#263445";
+      ctx.lineWidth = 30;
+      const roads = [
+        [[80, 440], [350, 170], [800, 380]],
+        [[120, 270], [850, 270]],
+        [[190, 95], [760, 95]],
+        [[220, 460], [850, 160]]
+      ];
+      for (const road of roads) {
+        ctx.beginPath();
+        ctx.moveTo(road[0][0], road[0][1]);
+        for (let i = 1; i < road.length; i++) ctx.lineTo(road[i][0], road[i][1]);
+        ctx.stroke();
+      }
+    }
+
+    function drawPoint(point, label, color) {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, point.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#0f172a";
+      ctx.font = "700 13px system-ui";
+      ctx.textAlign = "center";
+      ctx.fillText(label, point.x, point.y + 5);
+    }
+
+    function draw() {
+      drawCity();
+      if (route.length > 1) {
+        ctx.strokeStyle = failed ? "#fb7185" : "#8be9a6";
+        ctx.lineWidth = 5;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.beginPath();
+        ctx.moveTo(route[0].x, route[0].y);
+        for (const p of route.slice(1)) ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+      }
+      drawPoint(pickup, pickup.done ? "OK" : "P", pickup.done ? "#38bdf8" : "#fbbf24");
+      drawPoint(delivery, delivery.done ? "OK" : "D", delivery.done ? "#8be9a6" : "#a78bfa");
+      for (const car of traffic) {
+        ctx.fillStyle = "#fb7185";
+        ctx.beginPath();
+        ctx.arc(car.x, car.y, car.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = "#f8fafc";
+      ctx.beginPath();
+      ctx.arc(courier.x, courier.y, courier.r, 0, Math.PI * 2);
+      ctx.fill();
+      timerEl.textContent = `Time ${Math.max(0, timeLeft).toFixed(1)}`;
+      distanceEl.textContent = `Distance ${routeDistance()}`;
+    }
+
+    function frame(now) {
+      const dt = Math.min(0.04, (now - lastTime) / 1000);
+      lastTime = now;
+      update(dt);
+      draw();
+      requestAnimationFrame(frame);
+    }
+
+    reset();
+    requestAnimationFrame(frame);
+  </script>
+</body>
+</html>
