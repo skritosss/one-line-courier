@@ -48,7 +48,9 @@ The game is designed around very short sessions: each level should be readable i
 
 ## Live Prototype
 
-Open [`prototype/index.html`](prototype/index.html) in a browser to try the first route-drawing prototype.
+Try the browser prototype: <https://skritosss.github.io/one-line-courier/prototype/>
+
+Source: [`prototype/index.html`](prototype/index.html)
 
 What exists now:
 
